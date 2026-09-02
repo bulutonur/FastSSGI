@@ -73,3 +73,9 @@ Plugins/**/Intermediate/*
 
 # Cache files for the editor to use
 DerivedDataCache/*
+
+# Jetbrains
+.idea/*
+
+# Ignore content for this project
+Content/*
