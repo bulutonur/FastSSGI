@@ -1,0 +1,68 @@
+#pragma once
+
+#include "CoreMinimal.h"
+#include "Engine/DeveloperSettings.h"
+#include "FastSSGISettings.generated.h"
+
+UENUM(BlueprintType)
+enum class EFastSSGIResolution : uint8
+{
+	Full UMETA(DisplayName = "Full Resolution"),
+	Half UMETA(DisplayName = "Half Resolution"),
+	Quarter UMETA(DisplayName = "Quarter Resolution")
+};
+
+UENUM(BlueprintType)
+enum class EFastSSGIDebugMode : uint8
+{
+	Off,
+	RayMarch UMETA(DisplayName = "Ray March"),
+	Temporal UMETA(DisplayName = "Temporal Accumulation"),
+	Denoised UMETA(DisplayName = "Denoised GI"),
+	Depth UMETA(DisplayName = "Scene Depth"),
+	GeneratedNormal UMETA(DisplayName = "Generated Normal")
+};
+
+/** Default controls for the Forward Shading compatible custom SSGI renderer. */
+UCLASS(Config=Engine, DefaultConfig, meta=(DisplayName="FastSSGI"))
+class FASTSSGI_API UFastSSGISettings final : public UDeveloperSettings
+{
+	GENERATED_BODY()
+
+public:
+	UFastSSGISettings();
+
+	virtual FName GetCategoryName() const override { return TEXT("Plugins"); }
+	virtual void PostInitProperties() override;
+#if WITH_EDITOR
+	virtual void PostEditChangeProperty(FPropertyChangedEvent& PropertyChangedEvent) override;
+#endif
+
+	UPROPERTY(Config, EditAnywhere, Category="General")
+	bool bEnabled = true;
+
+	UPROPERTY(Config, EditAnywhere, Category="Quality")
+	EFastSSGIResolution Resolution = EFastSSGIResolution::Full;
+
+	UPROPERTY(Config, EditAnywhere, Category="Quality", meta=(ClampMin="1", ClampMax="32", UIMin="1", UIMax="16"))
+	int32 Samples = 8;
+
+	UPROPERTY(Config, EditAnywhere, Category="Ray March", meta=(ClampMin="2", ClampMax="64", UIMin="4", UIMax="32"))
+	int32 Steps = 12;
+
+	/** Maximum 3D ray distance in meters. */
+	UPROPERTY(Config, EditAnywhere, Category="Ray March", meta=(ClampMin="0.1", ClampMax="10.0", UIMin="0.25", UIMax="4.0", Units="m"))
+	float Radius = 1.5f;
+
+	UPROPERTY(Config, EditAnywhere, Category="Ray March", meta=(ClampMin="0.0", ClampMax="10.0"))
+	float Intensity = 1.0f;
+	
+	UPROPERTY(Config, EditAnywhere, Category="Temporal", meta=(ClampMin="0.0", ClampMax="0.98"))
+	float HistoryWeight = 0.9f;
+	
+	UPROPERTY(Config, EditAnywhere, Category="Debug")
+	EFastSSGIDebugMode DebugMode = EFastSSGIDebugMode::Off;
+
+private:
+	void ApplyToConsoleVariables() const;
+};

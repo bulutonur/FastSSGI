@@ -1,0 +1,62 @@
+#include "/Engine/Private/Common.ush"
+
+float4 SceneUVScaleBias;
+
+float Intensity;
+int DebugMode;
+
+Texture2D RayMarchTexture;
+Texture2D TemporalTexture;
+Texture2D DenoisedTexture;
+Texture2D SceneColorTexture;
+Texture2D SceneDepthTexture;
+
+SamplerState PointSampler;
+SamplerState BilinearSampler;
+
+
+void CompositePS(
+	noperspective float4 UVAndScreenPos : TEXCOORD0,
+	in FStereoPSInput StereoInput,
+	out float4 OutColor : SV_Target0)
+{
+	const float2 UV = UVAndScreenPos.xy;
+	const float2 sceneUV = UV * SceneUVScaleBias.xy + SceneUVScaleBias.zw;
+	if (DebugMode == 1)
+	{
+		OutColor = float4(RayMarchTexture.SampleLevel(BilinearSampler, UV, 0).rgb, 1.0);
+	}
+	else if (DebugMode == 2)
+	{
+		OutColor = float4(TemporalTexture.SampleLevel(BilinearSampler, UV, 0).rgb, 1.0);
+	}
+	else if (DebugMode == 3)
+	{
+		OutColor = float4(DenoisedTexture.SampleLevel(BilinearSampler, UV, 0).rgb, 1.0);
+	}
+	else if (DebugMode == 4)
+	{
+		/*
+		const float deviceZ = SceneDepthTexture.SampleLevel(PointSampler, sceneUV, 0).r;
+		if (deviceZ <= 0.0)
+		{
+			OutColor = float4(1.0, 1.0, 1.0, 1.0);
+			return;
+		}
+		const float3 position = ReconstructTranslatedWorldPosition(UV, deviceZ);
+		const float depth = length(position - View.TranslatedWorldCameraOrigin);
+		OutColor = float4(saturate(depth / 10000.0).xxx, 1.0);
+		*/
+		OutColor=0;
+	}
+	else if (DebugMode == 5)
+	{
+		OutColor = float4(RayMarchTexture.SampleLevel(BilinearSampler, UV, 0).rgb, 1.0);
+	}
+	else
+	{
+		const float4 sceneColor = SceneColorTexture.SampleLevel(PointSampler, sceneUV, 0);
+		const float3 gi = DenoisedTexture.SampleLevel(BilinearSampler, UV, 0).rgb;
+		OutColor = float4(sceneColor.rgb + gi * Intensity, sceneColor.a);
+	}
+}

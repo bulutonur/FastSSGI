@@ -1,0 +1,75 @@
+#include "/Engine/Private/Common.ush"
+
+float4 SceneUVScaleBias;
+float HistoryWeight;
+uint HasHistory;
+float2 InvSize;
+
+Texture2D HistoryTexture;
+Texture2D CurrentTexture;
+SamplerState InputSampler;
+Texture2D SceneDepthTexture;
+SamplerState SceneDepthSampler;
+
+
+void TemporalPS(
+	noperspective float4 UVAndScreenPos : TEXCOORD0,
+	in FStereoPSInput StereoInput,
+	out float4 OutColor : SV_Target0)
+{
+	const float2 UV = UVAndScreenPos.xy;
+	const float4 current = CurrentTexture.SampleLevel(InputSampler, UV, 0);
+	const float2 sceneUV = UV * SceneUVScaleBias.xy + SceneUVScaleBias.zw;
+	const float deviceZ = SceneDepthTexture.SampleLevel(SceneDepthSampler, sceneUV, 0).r;
+
+	// Unreal uses reversed-Z: zero is the invalid/far-clear depth value.
+	if (HasHistory == 0u || deviceZ <= 0.0)
+	{
+		OutColor = current;
+		return;
+	}
+
+	// Reproject current viewport UV through Unreal's current-clip to previous-clip transform.
+	// This includes camera motion, temporal jitter, and translated-world origin changes.
+	const float2 currentScreen = ViewportUVToScreenPos(UV);
+	const float4 previousClip = mul(float4(currentScreen, deviceZ, 1.0), View.ClipToPrevClip);
+	if (previousClip.w <= 0.0)
+	{
+		OutColor = current;
+		return;
+	}
+
+	const float2 previousUV = ScreenPosToViewportUV(previousClip.xy / previousClip.w);
+	if (any(previousUV <= 0.0) || any(previousUV >= 1.0))
+	{
+		OutColor = current;
+		return;
+	}
+
+	float4 history = HistoryTexture.SampleLevel(InputSampler, previousUV, 0);
+
+	// Clamp reprojected radiance to the current 3x3 neighborhood to suppress ghost trails.
+	float3 neighborhoodMin = current.rgb;
+	float3 neighborhoodMax = current.rgb;
+	const float2 halfPixel = InvSize * 0.5;
+	[unroll]
+	for (int y = -1; y <= 1; ++y)
+	{
+		[unroll]
+		for (int x = -1; x <= 1; ++x)
+		{
+			if (x == 0 && y == 0)
+			{
+				continue;
+			}
+
+			const float2 sampleUV = clamp(UV + float2(x, y) * InvSize, halfPixel, 1.0 - halfPixel);
+			const float3 sampleColor = CurrentTexture.SampleLevel(InputSampler, sampleUV, 0).rgb;
+			neighborhoodMin = min(neighborhoodMin, sampleColor);
+			neighborhoodMax = max(neighborhoodMax, sampleColor);
+		}
+	}
+
+	history.rgb = clamp(history.rgb, neighborhoodMin, neighborhoodMax);
+	OutColor = float4(lerp(current.rgb, history.rgb, HistoryWeight), current.a);
+}

@@ -1,0 +1,23 @@
+#include "/Engine/Private/Common.ush"
+
+Texture2D InputTexture;
+SamplerState InputSampler;
+float2 InvSize;
+float2 Direction;
+
+
+void BlurPS(
+	noperspective float4 UVAndScreenPos : TEXCOORD0,
+	in FStereoPSInput StereoInput,
+	out float4 OutColor : SV_Target0)
+{
+	const float2 UV = UVAndScreenPos.xy;
+	const float4 center = InputTexture.SampleLevel(InputSampler, UV, 0);
+	
+	float4 color = 0;
+	float2 offset = 1.3333333333333333 * Direction;
+	color += center * 0.29411764705882354;
+	color += InputTexture.SampleLevel(InputSampler, UV + offset * InvSize,0) * 0.35294117647058826;
+	color += InputTexture.SampleLevel(InputSampler, UV - offset * InvSize,0) * 0.35294117647058826;
+	OutColor=float4(color.rgb,center.a);
+}

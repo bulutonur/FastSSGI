@@ -1,9 +1,9 @@
-﻿// Copyright Epic Games, Inc. All Rights Reserved.
-
-#pragma once
+﻿#pragma once
 
 #include "Modules/ModuleManager.h"
 
+class FFastSSGIViewExtension;
+	
 class FFastSSGIModule : public IModuleInterface
 {
 public:
@@ -11,4 +11,9 @@ public:
 	/** IModuleInterface implementation */
 	virtual void StartupModule() override;
 	virtual void ShutdownModule() override;
+private:
+	void OnPostEngineInit();
+	FDelegateHandle PostEngineInitHandle;
+	TSharedPtr<FFastSSGIViewExtension, ESPMode::ThreadSafe> ViewExtension;
+
 };
