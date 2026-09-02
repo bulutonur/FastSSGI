@@ -4,7 +4,7 @@ Texture2D InputTexture;
 SamplerState InputSampler;
 float2 InvSize;
 float2 Direction;
-
+float BlurRadius;
 
 void BlurPS(
 	noperspective float4 UVAndScreenPos : TEXCOORD0,
@@ -15,7 +15,7 @@ void BlurPS(
 	const float4 center = InputTexture.SampleLevel(InputSampler, UV, 0);
 	
 	float4 color = 0;
-	float2 offset = 1.3333333333333333 * Direction;
+	float2 offset = 1.3333333333333333 * Direction * BlurRadius;
 	color += center * 0.29411764705882354;
 	color += InputTexture.SampleLevel(InputSampler, UV + offset * InvSize,0) * 0.35294117647058826;
 	color += InputTexture.SampleLevel(InputSampler, UV - offset * InvSize,0) * 0.35294117647058826;

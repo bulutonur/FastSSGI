@@ -4,7 +4,7 @@ float4 SceneUVScaleBias;
 float2 OutputInvSize;
 int SampleCount;
 int StepCount;
-float Radius;
+float RayMarchRadius;
 
 int DebugMode;
 
@@ -137,7 +137,7 @@ void RayMarchPS(
 	for (int ray = 0; ray < SampleCount; ++ray)
 	{
 		const float3 rayDirection = CosWeightedRandomHemisphereDirection(centerNormal, seed);
-		const float surfaceBias = max(1.0, Radius * 0.002);
+		const float surfaceBias = max(1.0, RayMarchRadius * 0.002);
 		const float3 rayOrigin = centerPosition + centerNormal * surfaceBias;
 		float previousDepthDelta = -1.0e8;
 		float previousRayDistance = 0.0;
@@ -145,7 +145,7 @@ void RayMarchPS(
 		for (int step = 1; step <= StepCount; ++step)
 		{
 			const float normalizedStep = float(step) / float(StepCount);
-			const float rayDistance = Radius * normalizedStep * normalizedStep;
+			const float rayDistance = RayMarchRadius * normalizedStep * normalizedStep;
 			const float3 rayPosition = rayOrigin + rayDirection * rayDistance;
 			float2 rayViewportUV;
 			float raySceneDepth;
@@ -175,7 +175,7 @@ void RayMarchPS(
 
 				const float3 radiance = SceneColorTexture.SampleLevel(SceneColorSampler, raySceneUV, 0).rgb;
 				
-				float3 correctedRadiance=ClampLuminance(radiance,1.0);
+				float3 correctedRadiance=ClampLuminance(radiance,1);
 				
 				indirect += max(correctedRadiance, 0.0) * weight;
 				
