@@ -1,5 +1,6 @@
 #include "FastSSGIViewExtension.h"
 
+#include "FastSSGIBlendable.h"
 #include "FastSSGIShaders.h"
 #include "PostProcess/PostProcessInputs.h"
 #include "RenderGraphBuilder.h"
@@ -38,6 +39,28 @@ namespace
 	TAutoConsoleVariable<int32> CVarDebug(
 		TEXT("r.FastSSGI.Debug"), 0,
 		TEXT("Debug output. 0: off, 1: ray march, 2: temporal, 3: denoised, 4: depth, 5: generated normal."), ECVF_RenderThreadSafe);
+
+	FFastSSGIBlendableData GetViewSettings(const FSceneView& View)
+	{
+		FBlendableEntry* Iterator = nullptr;
+		if (const FFastSSGIBlendableData* Settings = View.FinalPostProcessSettings.BlendableManager.IterateBlendables<FFastSSGIBlendableData>(Iterator))
+		{
+			return *Settings;
+		}
+
+		FFastSSGIBlendableData Settings;
+		Settings.Enabled = static_cast<float>(CVarEnable.GetValueOnRenderThread());
+		Settings.Resolution = static_cast<float>(CVarResolution.GetValueOnRenderThread());
+		Settings.Samples = static_cast<float>(CVarSamples.GetValueOnRenderThread());
+		Settings.Steps = static_cast<float>(CVarSteps.GetValueOnRenderThread());
+		Settings.RayMarchRadius = CVarRayMarchRadius.GetValueOnRenderThread();
+		Settings.Intensity = CVarIntensity.GetValueOnRenderThread();
+		Settings.HistoryWeight = CVarHistoryWeight.GetValueOnRenderThread();
+		Settings.BlurQuality = static_cast<float>(CVarBlurQuality.GetValueOnRenderThread());
+		Settings.BlurRadius = CVarBlurRadius.GetValueOnRenderThread();
+		Settings.DebugMode = static_cast<float>(CVarDebug.GetValueOnRenderThread());
+		return Settings;
+	}
 
 	FRDGTextureRef CreateTarget(FRDGBuilder& GraphBuilder, FIntPoint Extent, const TCHAR* Name)
 	{
@@ -98,7 +121,8 @@ void FFastSSGIViewExtension::PrePostProcessPass_RenderThread(
 	const FPostProcessingInputs& Inputs)
 {
 	check(IsInRenderingThread());
-	if (CVarEnable.GetValueOnRenderThread() == 0 || !Inputs.SceneTextures || !View.Family)
+	const FFastSSGIBlendableData Settings = GetViewSettings(View);
+	if (Settings.Enabled <= UE_KINDA_SMALL_NUMBER || !Inputs.SceneTextures || !View.Family)
 	{
 		return;
 	}
@@ -124,7 +148,7 @@ void FFastSSGIViewExtension::PrePostProcessPass_RenderThread(
 		return;
 	}
 
-	const int32 ResolutionMode = FMath::Clamp(CVarResolution.GetValueOnRenderThread(), 0, 2);
+	const int32 ResolutionMode = FMath::Clamp(FMath::RoundToInt(Settings.Resolution), 0, 2);
 	const int32 Divisor = 1 << ResolutionMode;
 	const FIntPoint InternalExtent(
 		FMath::DivideAndRoundUp(SceneRect.Width(), Divisor),
@@ -142,10 +166,10 @@ void FFastSSGIViewExtension::PrePostProcessPass_RenderThread(
 	RayParameters->View = View.ViewUniformBuffer;
 	RayParameters->SceneUVScaleBias = SceneUVScaleBias;
 	RayParameters->OutputInvSize = FVector2f(1.0f / InternalExtent.X, 1.0f / InternalExtent.Y);
-	RayParameters->SampleCount = FMath::Clamp(CVarSamples.GetValueOnRenderThread(), 1, 32);
-	RayParameters->StepCount = FMath::Clamp(CVarSteps.GetValueOnRenderThread(), 2, 64);
-	RayParameters->RayMarchRadius = FMath::Clamp(CVarRayMarchRadius.GetValueOnRenderThread(), 0.1f, 10.0f) * 100.0f;
-	RayParameters->DebugMode = FMath::Clamp(CVarDebug.GetValueOnRenderThread(), 0, 5);
+	RayParameters->SampleCount = FMath::Clamp(FMath::RoundToInt(Settings.Samples), 1, 32);
+	RayParameters->StepCount = FMath::Clamp(FMath::RoundToInt(Settings.Steps), 2, 64);
+	RayParameters->RayMarchRadius = FMath::Clamp(Settings.RayMarchRadius, 0.1f, 10.0f) * 100.0f;
+	RayParameters->DebugMode = FMath::Clamp(FMath::RoundToInt(Settings.DebugMode), 0, 5);
 	RayParameters->SceneColorTexture = SceneColor;
 	RayParameters->SceneColorSampler = TStaticSamplerState<SF_Bilinear, AM_Clamp, AM_Clamp>::GetRHI();
 	RayParameters->SceneDepthTexture = SceneDepth;
@@ -160,8 +184,8 @@ void FFastSSGIViewExtension::PrePostProcessPass_RenderThread(
 		Parameters->InvSize = FVector2f(1.0f / InternalExtent.X, 1.0f / InternalExtent.Y);
 		Parameters->InputTexture = Input;
 		Parameters->InputSampler = TStaticSamplerState<SF_Point, AM_Clamp, AM_Clamp>::GetRHI();
-		Parameters->BlurRadius=FMath::Clamp(CVarBlurRadius.GetValueOnRenderThread(), 0.5f, 5.0f);
-		Parameters->BlurQuality=FMath::Clamp(CVarBlurQuality.GetValueOnRenderThread(), 0, 2);
+		Parameters->BlurRadius = FMath::Clamp(Settings.BlurRadius, 0.5f, 10.0f);
+		Parameters->BlurQuality = FMath::Clamp(FMath::RoundToInt(Settings.BlurQuality), 0, 2);
 		
 		DrawPass<FFastSSGIBlurPS>(GraphBuilder, View, RDG_EVENT_NAME("%s", Name), Output, InternalRect, InternalExtent, Parameters);
 		return Output;
@@ -195,7 +219,7 @@ void FFastSSGIViewExtension::PrePostProcessPass_RenderThread(
 	TemporalParameters->View = View.ViewUniformBuffer;
 	TemporalParameters->SceneUVScaleBias = SceneUVScaleBias;
 	TemporalParameters->InvSize = FVector2f(1.0f / InternalExtent.X, 1.0f / InternalExtent.Y);
-	TemporalParameters->HistoryWeight = FMath::Clamp(CVarHistoryWeight.GetValueOnRenderThread(), 0.0f, 0.98f);
+	TemporalParameters->HistoryWeight = FMath::Clamp(Settings.HistoryWeight, 0.0f, 0.98f);
 	TemporalParameters->HasHistory = bHasHistory ? 1u : 0u;
 	TemporalParameters->CurrentTexture = BlurVertical;
 	TemporalParameters->HistoryTexture = HistoryTexture;
@@ -216,8 +240,8 @@ void FFastSSGIViewExtension::PrePostProcessPass_RenderThread(
 	auto* CompositeParameters = GraphBuilder.AllocParameters<FFastSSGICompositePS::FParameters>();
 	CompositeParameters->View = View.ViewUniformBuffer;
 	CompositeParameters->SceneUVScaleBias = SceneUVScaleBias;
-	CompositeParameters->Intensity = FMath::Max(CVarIntensity.GetValueOnRenderThread(), 0.0f);
-	CompositeParameters->DebugMode = FMath::Clamp(CVarDebug.GetValueOnRenderThread(), 0, 5);
+	CompositeParameters->Intensity = FMath::Max(Settings.Intensity * FMath::Clamp(Settings.Enabled, 0.0f, 1.0f), 0.0f);
+	CompositeParameters->DebugMode = FMath::Clamp(FMath::RoundToInt(Settings.DebugMode), 0, 5);
 	CompositeParameters->SceneColorTexture = SceneColor;
 	// Generated-normal debug output is authored by RayMarchPS but is not ray-marched radiance, so keep it unfiltered.
 	CompositeParameters->RayMarchTexture = CompositeParameters->DebugMode == 5 ? RayMarch : BlurVertical;
