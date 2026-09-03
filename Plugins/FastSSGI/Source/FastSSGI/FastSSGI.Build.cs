@@ -12,7 +12,6 @@ public class FastSSGI : ModuleRules
 		{
 			"Core",
 			"CoreUObject",
-			"DeveloperSettings",
 			"Engine"
 		});
 
