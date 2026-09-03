@@ -42,11 +42,8 @@ public:
 	UPROPERTY(Config, EditAnywhere, Category="Temporal", meta=(ClampMin="0.0", ClampMax="0.98"))
 	float HistoryWeight = 0.9f;
 
-	UPROPERTY(Config, EditAnywhere, Category="Blur")
-	EFastSSGIBlurQuality BlurQuality = EFastSSGIBlurQuality::Low;
-	
-	UPROPERTY(Config, EditAnywhere, Category="Blur", meta=(ClampMin="0.5", ClampMax="10.0", UIMin="0.5", UIMax="10.0"))
-	float BlurRadius = 1.0f;
+	UPROPERTY(Config, EditAnywhere, Category="Denoise")
+	EFastSSGIDenoiseQuality DenoiseQuality = EFastSSGIDenoiseQuality::Low;
 	
 	UPROPERTY(Config, EditAnywhere, Category="Debug")
 	EFastSSGIDebugMode DebugMode = EFastSSGIDebugMode::Off;

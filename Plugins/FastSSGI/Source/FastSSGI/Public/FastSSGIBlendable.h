@@ -16,8 +16,7 @@ struct FFastSSGIBlendableData
 	float RayMarchRadius = 1.5f;
 	float Intensity = 1.0f;
 	float HistoryWeight = 0.9f;
-	float BlurQuality = 0.0f;
-	float BlurRadius = 1.0f;
+	float DenoiseQuality = 0.0f;
 	float DebugMode = 0.0f;
 
 	static const FName& GetFName();
@@ -57,11 +56,8 @@ public:
 	UPROPERTY(EditAnywhere, BlueprintReadWrite, Category="Temporal", meta=(ClampMin="0.0", ClampMax="0.98"))
 	float HistoryWeight = 0.9f;
 
-	UPROPERTY(EditAnywhere, BlueprintReadWrite, Category="Blur")
-	EFastSSGIBlurQuality BlurQuality = EFastSSGIBlurQuality::Low;
-
-	UPROPERTY(EditAnywhere, BlueprintReadWrite, Category="Blur", meta=(ClampMin="0.5", ClampMax="10.0", UIMin="0.5", UIMax="10.0"))
-	float BlurRadius = 1.0f;
+	UPROPERTY(EditAnywhere, BlueprintReadWrite, Category="Denoise")
+	EFastSSGIDenoiseQuality DenoiseQuality = EFastSSGIDenoiseQuality::Low;
 
 	UPROPERTY(EditAnywhere, BlueprintReadWrite, Category="Debug")
 	EFastSSGIDebugMode DebugMode = EFastSSGIDebugMode::Off;

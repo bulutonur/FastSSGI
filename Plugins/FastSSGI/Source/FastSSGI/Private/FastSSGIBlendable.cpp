@@ -30,8 +30,7 @@ void FFastSSGIBlendableData::SetBaseValues()
 	RayMarchRadius = GetConsoleVariableValue(TEXT("r.FastSSGI.RayMarchRadius"), 1.5f);
 	Intensity = GetConsoleVariableValue(TEXT("r.FastSSGI.Intensity"), 1.0f);
 	HistoryWeight = GetConsoleVariableValue(TEXT("r.FastSSGI.HistoryWeight"), 0.9f);
-	BlurQuality = GetConsoleVariableValue(TEXT("r.FastSSGI.BlurQuality"), 0.0f);
-	BlurRadius = GetConsoleVariableValue(TEXT("r.FastSSGI.BlurRadius"), 1.5f);
+	DenoiseQuality = GetConsoleVariableValue(TEXT("r.FastSSGI.DenoiseQuality"), 0.0f);
 	DebugMode = GetConsoleVariableValue(TEXT("r.FastSSGI.Debug"), 0.0f);
 }
 
@@ -44,8 +43,7 @@ void FFastSSGIBlendableData::Override(const FFastSSGIBlendableData& Values, cons
 	RayMarchRadius = FMath::Lerp(RayMarchRadius, Values.RayMarchRadius, Weight);
 	Intensity = FMath::Lerp(Intensity, Values.Intensity, Weight);
 	HistoryWeight = FMath::Lerp(HistoryWeight, Values.HistoryWeight, Weight);
-	BlurQuality = FMath::Lerp(BlurQuality, Values.BlurQuality, Weight);
-	BlurRadius = FMath::Lerp(BlurRadius, Values.BlurRadius, Weight);
+	DenoiseQuality = FMath::Lerp(DenoiseQuality, Values.DenoiseQuality, Weight);
 	DebugMode = FMath::Lerp(DebugMode, Values.DebugMode, Weight);
 }
 
@@ -69,8 +67,7 @@ FFastSSGIBlendableData UFastSSGIBlendable::GetValues() const
 	Values.RayMarchRadius = RayMarchRadius;
 	Values.Intensity = Intensity;
 	Values.HistoryWeight = HistoryWeight;
-	Values.BlurQuality = static_cast<float>(BlurQuality);
-	Values.BlurRadius = BlurRadius;
+	Values.DenoiseQuality = static_cast<float>(DenoiseQuality);
 	Values.DebugMode = static_cast<float>(DebugMode);
 	return Values;
 }

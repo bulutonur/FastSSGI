@@ -12,7 +12,7 @@ enum class EFastSSGIResolution : uint8
 };
 
 UENUM(BlueprintType)
-enum class EFastSSGIBlurQuality : uint8
+enum class EFastSSGIDenoiseQuality : uint8
 {
 	Low UMETA(DisplayName = "Low"),
 	Medium UMETA(DisplayName = "Medium"),

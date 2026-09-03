@@ -30,12 +30,9 @@ namespace
 	TAutoConsoleVariable<float> CVarHistoryWeight(
 		TEXT("r.FastSSGI.HistoryWeight"), 0.9f,
 		TEXT("Temporal history weight (0-0.98)."), ECVF_RenderThreadSafe);
-	TAutoConsoleVariable<int32> CVarBlurQuality(
-	TEXT("r.FastSSGI.BlurQuality"), 0,
-	TEXT("Blur quality. 0: low, 1: medium, 2: high."), ECVF_RenderThreadSafe);
-	TAutoConsoleVariable<float> CVarBlurRadius(
-	TEXT("r.FastSSGI.BlurRadius"), 1.5f,
-	TEXT("SSGI blur radius in pixels."), ECVF_RenderThreadSafe);
+	TAutoConsoleVariable<int32> CVarDenoiseQuality(
+		TEXT("r.FastSSGI.DenoiseQuality"), 0,
+		TEXT("A-trous denoise quality. 0: one iteration, 1: two iterations, 2: three iterations."), ECVF_RenderThreadSafe);
 	TAutoConsoleVariable<int32> CVarDebug(
 		TEXT("r.FastSSGI.Debug"), 0,
 		TEXT("Debug output. 0: off, 1: ray march, 2: temporal, 3: denoised, 4: depth, 5: generated normal."), ECVF_RenderThreadSafe);
@@ -56,8 +53,7 @@ namespace
 		Settings.RayMarchRadius = CVarRayMarchRadius.GetValueOnRenderThread();
 		Settings.Intensity = CVarIntensity.GetValueOnRenderThread();
 		Settings.HistoryWeight = CVarHistoryWeight.GetValueOnRenderThread();
-		Settings.BlurQuality = static_cast<float>(CVarBlurQuality.GetValueOnRenderThread());
-		Settings.BlurRadius = CVarBlurRadius.GetValueOnRenderThread();
+		Settings.DenoiseQuality = static_cast<float>(CVarDenoiseQuality.GetValueOnRenderThread());
 		Settings.DebugMode = static_cast<float>(CVarDebug.GetValueOnRenderThread());
 		return Settings;
 	}
@@ -174,26 +170,8 @@ void FFastSSGIViewExtension::PrePostProcessPass_RenderThread(
 	RayParameters->SceneColorSampler = TStaticSamplerState<SF_Bilinear, AM_Clamp, AM_Clamp>::GetRHI();
 	RayParameters->SceneDepthTexture = SceneDepth;
 	RayParameters->SceneDepthSampler = TStaticSamplerState<SF_Point, AM_Clamp, AM_Clamp>::GetRHI();
-	DrawPass<FFastSSGIRayMarchPS>(GraphBuilder, View, RDG_EVENT_NAME("CustomSSGI Ray March (%d rays x %d steps)", RayParameters->SampleCount, RayParameters->StepCount), RayMarch, InternalRect, InternalExtent, RayParameters);
+	DrawPass<FFastSSGIRayMarchPS>(GraphBuilder, View, RDG_EVENT_NAME("FastSSGI Ray March (%d rays x %d steps)", RayParameters->SampleCount, RayParameters->StepCount), RayMarch, InternalRect, InternalExtent, RayParameters);
 
-	auto AddBlurPass = [&](FRDGTextureRef Input, const FVector2f Direction, const TCHAR* Name)
-	{
-		FRDGTextureRef Output = CreateTarget(GraphBuilder, InternalExtent, Name);
-		auto* Parameters = GraphBuilder.AllocParameters<FFastSSGIBlurPS::FParameters>();
-		Parameters->Direction = Direction;
-		Parameters->InvSize = FVector2f(1.0f / InternalExtent.X, 1.0f / InternalExtent.Y);
-		Parameters->InputTexture = Input;
-		Parameters->InputSampler = TStaticSamplerState<SF_Point, AM_Clamp, AM_Clamp>::GetRHI();
-		Parameters->BlurRadius = FMath::Clamp(Settings.BlurRadius, 0.5f, 10.0f);
-		Parameters->BlurQuality = FMath::Clamp(FMath::RoundToInt(Settings.BlurQuality), 0, 2);
-		
-		DrawPass<FFastSSGIBlurPS>(GraphBuilder, View, RDG_EVENT_NAME("%s", Name), Output, InternalRect, InternalExtent, Parameters);
-		return Output;
-	};
-	
-	FRDGTextureRef BlurHorizontal = AddBlurPass(RayMarch, FVector2f(1.0f, 0.0f), TEXT("FastSSGI Blur Horizontal"));
-	FRDGTextureRef BlurVertical = AddBlurPass(BlurHorizontal, FVector2f(0.0f, 1.0f), TEXT("FastSSGI Blur Vertical"));
-	
 	const uint64 ViewKey = HashCombineFast(
 		PointerHash(View.State),
 		GetTypeHash(View.StereoViewIndex));
@@ -212,7 +190,7 @@ void FFastSSGIViewExtension::PrePostProcessPass_RenderThread(
 	const bool bHasHistory = bHistorySizeMatches && bHistoryRecent && !View.bCameraCut;
 	FRDGTextureRef HistoryTexture = bHasHistory
 		? GraphBuilder.RegisterExternalTexture(History.Texture, TEXT("FastSSGI.History"))
-		: BlurVertical;
+		: RayMarch;
 
 	FRDGTextureRef Temporal = CreateTarget(GraphBuilder, InternalExtent, TEXT("FastSSGI.Temporal"));
 	auto* TemporalParameters = GraphBuilder.AllocParameters<FFastSSGITemporalPS::FParameters>();
@@ -221,20 +199,44 @@ void FFastSSGIViewExtension::PrePostProcessPass_RenderThread(
 	TemporalParameters->InvSize = FVector2f(1.0f / InternalExtent.X, 1.0f / InternalExtent.Y);
 	TemporalParameters->HistoryWeight = FMath::Clamp(Settings.HistoryWeight, 0.0f, 0.98f);
 	TemporalParameters->HasHistory = bHasHistory ? 1u : 0u;
-	TemporalParameters->CurrentTexture = BlurVertical;
+	TemporalParameters->CurrentTexture = RayMarch;
 	TemporalParameters->HistoryTexture = HistoryTexture;
 	TemporalParameters->InputSampler = TStaticSamplerState<SF_Bilinear, AM_Clamp, AM_Clamp>::GetRHI();
 	TemporalParameters->SceneDepthTexture = SceneDepth;
 	TemporalParameters->SceneDepthSampler = TStaticSamplerState<SF_Point, AM_Clamp, AM_Clamp>::GetRHI();
 	DrawPass<FFastSSGITemporalPS>(GraphBuilder, View, RDG_EVENT_NAME("FastSSGI Temporal Accumulation"), Temporal, InternalRect, InternalExtent, TemporalParameters);
 
-	// Persist the actual final denoise output. QueueTextureExtraction extends this RDG texture's
-	// lifetime and assigns the pooled target after graph execution, so no intermediate copy is needed.
-	// The next frame feeds this exact texture through temporal accumulation and both denoise passes.
+	const FVector2f InternalInvSize(1.0f / InternalExtent.X, 1.0f / InternalExtent.Y);
+	FRDGTextureRef DenoiseGuide = CreateTarget(GraphBuilder, InternalExtent, TEXT("FastSSGI.DenoiseGuide"));
+	auto* GuideParameters = GraphBuilder.AllocParameters<FFastSSGIDenoiseGuidePS::FParameters>();
+	GuideParameters->View = View.ViewUniformBuffer;
+	GuideParameters->SceneUVScaleBias = SceneUVScaleBias;
+	GuideParameters->InvSize = InternalInvSize;
+	GuideParameters->SceneDepthTexture = SceneDepth;
+	GuideParameters->PointSampler = TStaticSamplerState<SF_Point, AM_Clamp, AM_Clamp>::GetRHI();
+	DrawPass<FFastSSGIDenoiseGuidePS>(GraphBuilder, View, RDG_EVENT_NAME("FastSSGI Denoise Guide"), DenoiseGuide, InternalRect, InternalExtent, GuideParameters);
+
+	const int32 DenoiseIterationCount = FMath::Clamp(FMath::RoundToInt(Settings.DenoiseQuality), 0, 2) + 1;
+	FRDGTextureRef Denoised = Temporal;
+	for (int32 Iteration = 0; Iteration < DenoiseIterationCount; ++Iteration)
+	{
+		const int32 StepWidth = 1 << Iteration;
+		FRDGTextureRef Output = CreateTarget(GraphBuilder, InternalExtent, TEXT("FastSSGI.AtrousDenoise"));
+		auto* Parameters = GraphBuilder.AllocParameters<FFastSSGIAtrousDenoisePS::FParameters>();
+		Parameters->InvSize = InternalInvSize;
+		Parameters->StepWidth = StepWidth;
+		Parameters->InputTexture = Denoised;
+		Parameters->GuideTexture = DenoiseGuide;
+		Parameters->PointSampler = TStaticSamplerState<SF_Point, AM_Clamp, AM_Clamp>::GetRHI();
+		DrawPass<FFastSSGIAtrousDenoisePS>(GraphBuilder, View, RDG_EVENT_NAME("FastSSGI A-Trous Denoise (Step %d)", StepWidth), Output, InternalRect, InternalExtent, Parameters);
+		Denoised = Output;
+	}
+
+	// Persist the final edge-aware denoise output for temporal reprojection next frame.
 	History.Texture.SafeRelease();
 	History.Extent = InternalExtent;
 	History.LastFrame = CurrentFrame;
-	GraphBuilder.QueueTextureExtraction(Temporal, &History.Texture);
+	GraphBuilder.QueueTextureExtraction(Denoised, &History.Texture);
 
 	FRDGTextureRef Composite = CreateCompositeTarget(GraphBuilder, SceneColor->Desc);
 	auto* CompositeParameters = GraphBuilder.AllocParameters<FFastSSGICompositePS::FParameters>();
@@ -244,9 +246,9 @@ void FFastSSGIViewExtension::PrePostProcessPass_RenderThread(
 	CompositeParameters->DebugMode = FMath::Clamp(FMath::RoundToInt(Settings.DebugMode), 0, 5);
 	CompositeParameters->SceneColorTexture = SceneColor;
 	// Generated-normal debug output is authored by RayMarchPS but is not ray-marched radiance, so keep it unfiltered.
-	CompositeParameters->RayMarchTexture = CompositeParameters->DebugMode == 5 ? RayMarch : BlurVertical;
+	CompositeParameters->RayMarchTexture = RayMarch;
 	CompositeParameters->TemporalTexture = Temporal;
-	CompositeParameters->DenoisedTexture = HistoryTexture;
+	CompositeParameters->DenoisedTexture = Denoised;
 	CompositeParameters->SceneDepthTexture = SceneDepth;
 	CompositeParameters->BilinearSampler = TStaticSamplerState<SF_Bilinear, AM_Clamp, AM_Clamp>::GetRHI();
 	CompositeParameters->PointSampler = TStaticSamplerState<SF_Point, AM_Clamp, AM_Clamp>::GetRHI();

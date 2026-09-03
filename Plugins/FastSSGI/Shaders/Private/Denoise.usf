@@ -1,0 +1,112 @@
+#include "/Engine/Private/Common.ush"
+
+float4 SceneUVScaleBias;
+float2 InvSize;
+int StepWidth;
+
+Texture2D InputTexture;
+Texture2D GuideTexture;
+Texture2D SceneDepthTexture;
+SamplerState PointSampler;
+
+float3 SafeNormalize(float3 value, float3 fallback)
+{
+	const float lengthSquared = dot(value, value);
+	return lengthSquared > 1.0e-8 ? value * rsqrt(lengthSquared) : fallback;
+}
+
+float3 ReconstructTranslatedWorldPosition(float2 viewportUV, float deviceZ)
+{
+	const float2 screenPosition = ViewportUVToScreenPos(viewportUV);
+	const float sceneDepth = ConvertFromDeviceZ(deviceZ);
+	return mul(
+		float4(GetScreenPositionForProjectionType(screenPosition, sceneDepth), sceneDepth, 1.0),
+		View.ScreenToTranslatedWorld).xyz;
+}
+
+void DenoiseGuidePS(
+	noperspective float4 UVAndScreenPos : TEXCOORD0,
+	in FStereoPSInput StereoInput,
+	out float4 OutGuide : SV_Target0)
+{
+	const float2 UV = UVAndScreenPos.xy;
+	const float2 halfPixel = InvSize * 0.5;
+	const float2 centerUV = clamp(UV, halfPixel, 1.0 - halfPixel);
+	const float2 xUV = clamp(centerUV + float2(InvSize.x, 0.0), halfPixel, 1.0 - halfPixel);
+	const float2 yUV = clamp(centerUV + float2(0.0, InvSize.y), halfPixel, 1.0 - halfPixel);
+	const float centerZ = SceneDepthTexture.SampleLevel(PointSampler, centerUV * SceneUVScaleBias.xy + SceneUVScaleBias.zw, 0).r;
+	const float xZ = SceneDepthTexture.SampleLevel(PointSampler, xUV * SceneUVScaleBias.xy + SceneUVScaleBias.zw, 0).r;
+	const float yZ = SceneDepthTexture.SampleLevel(PointSampler, yUV * SceneUVScaleBias.xy + SceneUVScaleBias.zw, 0).r;
+	if (centerZ <= 0.0 || xZ <= 0.0 || yZ <= 0.0)
+	{
+		OutGuide = float4(0.0, 0.0, 1.0, -1.0);
+		return;
+	}
+
+	const float3 center = ReconstructTranslatedWorldPosition(centerUV, centerZ);
+	const float3 positionX = ReconstructTranslatedWorldPosition(xUV, xZ);
+	const float3 positionY = ReconstructTranslatedWorldPosition(yUV, yZ);
+	const float3 toCamera = SafeNormalize(View.TranslatedWorldCameraOrigin - center, float3(0.0, 0.0, 1.0));
+	float3 normal = SafeNormalize(cross(positionY - center, positionX - center), toCamera);
+	normal = dot(normal, toCamera) >= 0.0 ? normal : -normal;
+	const float logDepth = log2(max(length(center - View.TranslatedWorldCameraOrigin), 1.0));
+	OutGuide = float4(normal, logDepth);
+}
+
+float NormalWeight(float3 centerNormal, float3 sampleNormal)
+{
+	// pow(saturate(dot(N0, N1)), 16) using multiplies to avoid a transcendental per tap.
+	float weight = saturate(dot(centerNormal, sampleNormal));
+	weight *= weight;
+	weight *= weight;
+	weight *= weight;
+	return weight * weight;
+}
+
+void AtrousDenoisePS(
+	noperspective float4 UVAndScreenPos : TEXCOORD0,
+	in FStereoPSInput StereoInput,
+	out float4 OutColor : SV_Target0)
+{
+	const float2 UV = UVAndScreenPos.xy;
+	const float2 halfPixel = InvSize * 0.5;
+	const float4 center = InputTexture.SampleLevel(PointSampler, UV, 0);
+	const float4 centerGuide = GuideTexture.SampleLevel(PointSampler, UV, 0);
+	if (centerGuide.a < 0.0)
+	{
+		OutColor = center;
+		return;
+	}
+
+	const float centerLuminance = Luminance(center.rgb);
+	const float luminanceSigma = max(centerLuminance * 0.25, 0.05);
+	float3 colorSum = 0.0;
+	float weightSum = 0.0;
+	static const float Kernel[5] = { 1.0, 4.0, 6.0, 4.0, 1.0 };
+
+	[unroll]
+	for (int y = -2; y <= 2; ++y)
+	{
+		[unroll]
+		for (int x = -2; x <= 2; ++x)
+		{
+			const float2 sampleUV = clamp(UV + float2(x, y) * float(StepWidth) * InvSize, halfPixel, 1.0 - halfPixel);
+			const float4 sampleValue = InputTexture.SampleLevel(PointSampler, sampleUV, 0);
+			const float4 sampleGuide = GuideTexture.SampleLevel(PointSampler, sampleUV, 0);
+			if (sampleGuide.a < 0.0)
+			{
+				continue;
+			}
+
+			const float kernelWeight = Kernel[x + 2] * Kernel[y + 2];
+			const float depthWeight = exp2(-abs(sampleGuide.a - centerGuide.a) * 64.0);
+			const float normalWeight = NormalWeight(centerGuide.rgb, sampleGuide.rgb);
+			const float luminanceWeight = exp2(-abs(Luminance(sampleValue.rgb) - centerLuminance) / luminanceSigma);
+			const float weight = kernelWeight * depthWeight * normalWeight * luminanceWeight;
+			colorSum += sampleValue.rgb * weight;
+			weightSum += weight;
+		}
+	}
+
+	OutColor = float4(colorSum / max(weightSum, 1.0e-4), center.a);
+}
