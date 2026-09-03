@@ -1,4 +1,4 @@
-#include "/Engine/Private/Common.ush"
+#include "/Plugin/FastSSGI/Private/Common.ush"
 
 float4 SceneUVScaleBias;
 float2 OutputInvSize;
@@ -14,12 +14,6 @@ Texture2D SceneDepthTexture;
 SamplerState SceneDepthSampler;
 
 
-
-float3 SafeNormalize(float3 value, float3 fallback)
-{
-	const float lengthSquared = dot(value, value);
-	return lengthSquared > 1.0e-8 ? value * rsqrt(lengthSquared) : fallback;
-}
 
 float2 Hash2(inout float seed) {
 	return frac(sin(float2(seed+=0.1,seed+=0.1))*float2(43758.5453123,22578.1459123));
@@ -39,16 +33,6 @@ float3 CosWeightedRandomHemisphereDirection( const float3 n, inout float seed ) 
     
 	return normalize( rr );
 }
-
-float3 ReconstructTranslatedWorldPosition(float2 ViewportUV, float DeviceZ)
-{
-	const float2 screenPosition = ViewportUVToScreenPos(ViewportUV);
-	const float sceneDepth = ConvertFromDeviceZ(DeviceZ);
-	return mul(
-		float4(GetScreenPositionForProjectionType(screenPosition, sceneDepth), sceneDepth, 1.0),
-		View.ScreenToTranslatedWorld).xyz;
-}
-
 
 bool ProjectTranslatedWorldPosition(float3 position, out float2 viewportUV, out float raySceneDepth)
 {

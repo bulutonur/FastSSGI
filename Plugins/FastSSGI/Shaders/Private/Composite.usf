@@ -1,4 +1,4 @@
-#include "/Engine/Private/Common.ush"
+#include "/Plugin/FastSSGI/Private/Common.ush"
 
 float4 SceneUVScaleBias;
 
@@ -37,7 +37,7 @@ void CompositePS(
 	}
 	else if (DebugMode == 4)
 	{
-		/*
+		
 		const float deviceZ = SceneDepthTexture.SampleLevel(PointSampler, sceneUV, 0).r;
 		if (deviceZ <= 0.0)
 		{
@@ -47,8 +47,6 @@ void CompositePS(
 		const float3 position = ReconstructTranslatedWorldPosition(UV, deviceZ);
 		const float depth = length(position - View.TranslatedWorldCameraOrigin);
 		OutColor = float4(saturate(depth / 10000.0).xxx, 1.0);
-		*/
-		OutColor=0;
 	}
 	else if (DebugMode == 5)
 	{

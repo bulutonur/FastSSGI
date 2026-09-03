@@ -1,0 +1,21 @@
+#ifndef FASTSSGI_COMMON_USH
+#define FASTSSGI_COMMON_USH
+
+#include "/Engine/Private/Common.ush"
+
+float3 SafeNormalize(float3 value, float3 fallback)
+{
+	const float lengthSquared = dot(value, value);
+	return lengthSquared > 1.0e-8 ? value * rsqrt(lengthSquared) : fallback;
+}
+
+float3 ReconstructTranslatedWorldPosition(float2 viewportUV, float deviceZ)
+{
+	const float2 screenPosition = ViewportUVToScreenPos(viewportUV);
+	const float sceneDepth = ConvertFromDeviceZ(deviceZ);
+	return mul(
+		float4(GetScreenPositionForProjectionType(screenPosition, sceneDepth), sceneDepth, 1.0),
+		View.ScreenToTranslatedWorld).xyz;
+}
+
+#endif // FASTSSGI_COMMON_USH
