@@ -15,6 +15,7 @@ struct FFastSSGIBlendableData
 	float Steps = 12.0f;
 	float RayMarchRadius = 1.5f;
 	float Intensity = 1.0f;
+	FVector3f IndirectColor = FVector3f::OneVector;
 	float HistoryWeight = 0.9f;
 	float DenoiseQuality = 0.0f;
 	float DebugMode = 0.0f;
@@ -52,6 +53,10 @@ public:
 
 	UPROPERTY(EditAnywhere, BlueprintReadWrite, Category="Ray March", meta=(ClampMin="0.0", ClampMax="10.0"))
 	float Intensity = 1.0f;
+
+	/** Color multiplier applied to the final indirect lighting. */
+	UPROPERTY(EditAnywhere, BlueprintReadWrite, Category="Ray March", meta=(DisplayName="Indirect Color", HideAlphaChannel))
+	FLinearColor IndirectColor = FLinearColor::White;
 
 	UPROPERTY(EditAnywhere, BlueprintReadWrite, Category="Temporal", meta=(ClampMin="0.0", ClampMax="0.98"))
 	float HistoryWeight = 0.9f;

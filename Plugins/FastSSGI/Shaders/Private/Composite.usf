@@ -3,6 +3,7 @@
 float4 SceneUVScaleBias;
 
 float Intensity;
+float3 IndirectColor;
 int DebugMode;
 
 Texture2D RayMarchTexture;
@@ -57,6 +58,6 @@ void CompositePS(
 	{
 		const float4 sceneColor = SceneColorTexture.SampleLevel(PointSampler, sceneUV, 0);
 		const float3 gi = DenoisedTexture.SampleLevel(BilinearSampler, UV, 0).rgb;
-		OutColor = float4(sceneColor.rgb + gi * Intensity, sceneColor.a);
+		OutColor = float4(sceneColor.rgb + gi * IndirectColor * Intensity, sceneColor.a);
 	}
 }

@@ -29,6 +29,7 @@ void FFastSSGIBlendableData::SetBaseValues()
 	Steps = GetConsoleVariableValue(TEXT("r.FastSSGI.Steps"), 12.0f);
 	RayMarchRadius = GetConsoleVariableValue(TEXT("r.FastSSGI.RayMarchRadius"), 1.5f);
 	Intensity = GetConsoleVariableValue(TEXT("r.FastSSGI.Intensity"), 1.0f);
+	IndirectColor = FVector3f::OneVector;
 	HistoryWeight = GetConsoleVariableValue(TEXT("r.FastSSGI.HistoryWeight"), 0.9f);
 	DenoiseQuality = GetConsoleVariableValue(TEXT("r.FastSSGI.DenoiseQuality"), 0.0f);
 	DebugMode = GetConsoleVariableValue(TEXT("r.FastSSGI.Debug"), 0.0f);
@@ -42,6 +43,7 @@ void FFastSSGIBlendableData::Override(const FFastSSGIBlendableData& Values, cons
 	Steps = FMath::Lerp(Steps, Values.Steps, Weight);
 	RayMarchRadius = FMath::Lerp(RayMarchRadius, Values.RayMarchRadius, Weight);
 	Intensity = FMath::Lerp(Intensity, Values.Intensity, Weight);
+	IndirectColor = FMath::Lerp(IndirectColor, Values.IndirectColor, Weight);
 	HistoryWeight = FMath::Lerp(HistoryWeight, Values.HistoryWeight, Weight);
 	DenoiseQuality = FMath::Lerp(DenoiseQuality, Values.DenoiseQuality, Weight);
 	DebugMode = FMath::Lerp(DebugMode, Values.DebugMode, Weight);
@@ -66,6 +68,7 @@ FFastSSGIBlendableData UFastSSGIBlendable::GetValues() const
 	Values.Steps = static_cast<float>(Steps);
 	Values.RayMarchRadius = RayMarchRadius;
 	Values.Intensity = Intensity;
+	Values.IndirectColor = FVector3f(IndirectColor.R, IndirectColor.G, IndirectColor.B);
 	Values.HistoryWeight = HistoryWeight;
 	Values.DenoiseQuality = static_cast<float>(DenoiseQuality);
 	Values.DebugMode = static_cast<float>(DebugMode);

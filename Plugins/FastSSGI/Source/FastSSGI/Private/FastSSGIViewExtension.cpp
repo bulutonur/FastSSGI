@@ -243,6 +243,7 @@ void FFastSSGIViewExtension::PrePostProcessPass_RenderThread(
 	CompositeParameters->View = View.ViewUniformBuffer;
 	CompositeParameters->SceneUVScaleBias = SceneUVScaleBias;
 	CompositeParameters->Intensity = FMath::Max(Settings.Intensity * FMath::Clamp(Settings.Enabled, 0.0f, 1.0f), 0.0f);
+	CompositeParameters->IndirectColor = Settings.IndirectColor.ComponentMax(FVector3f::ZeroVector);
 	CompositeParameters->DebugMode = FMath::Clamp(FMath::RoundToInt(Settings.DebugMode), 0, 5);
 	CompositeParameters->SceneColorTexture = SceneColor;
 	// Generated-normal debug output is authored by RayMarchPS but is not ray-marched radiance, so keep it unfiltered.

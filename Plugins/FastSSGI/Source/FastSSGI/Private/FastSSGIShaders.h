@@ -92,6 +92,7 @@ class FFastSSGICompositePS final : public FFastSSGIShader
 		SHADER_PARAMETER_STRUCT_REF(FViewUniformShaderParameters, View)
 		SHADER_PARAMETER(FVector4f, SceneUVScaleBias)
 		SHADER_PARAMETER(float, Intensity)
+		SHADER_PARAMETER(FVector3f, IndirectColor)
 		SHADER_PARAMETER(int32, DebugMode)
 		SHADER_PARAMETER_RDG_TEXTURE(Texture2D, SceneColorTexture)
 		SHADER_PARAMETER_RDG_TEXTURE(Texture2D, RayMarchTexture)
