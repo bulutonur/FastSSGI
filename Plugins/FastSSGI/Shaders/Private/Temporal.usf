@@ -18,9 +18,56 @@ void TemporalPS(
 	out float4 OutColor : SV_Target0)
 {
 	const float2 UV = UVAndScreenPos.xy;
-	const float4 current = CurrentTexture.SampleLevel(InputSampler, UV, 0);
+	float4 current = CurrentTexture.SampleLevel(InputSampler, UV, 0);
 	const float2 sceneUV = UV * SceneUVScaleBias.xy + SceneUVScaleBias.zw;
 	const float deviceZ = SceneDepthTexture.SampleLevel(SceneDepthSampler, sceneUV, 0).r;
+	const float2 halfPixel = InvSize * 0.5;
+	float3 neighborhoodMin = 1.0e8;
+	float3 neighborhoodMax = 0.0;
+	float neighborLuminanceSum = 0.0;
+	float neighborLuminanceMax = 0.0;
+	float validNeighborCount = 0.0;
+	const float depthTolerance = max(current.a * 0.02, 2.0);
+
+	// Use the temporal clamp neighborhood to reject isolated high-energy samples before
+	// they enter history. Coherent bright regions retain a high neighborhood threshold.
+	[unroll]
+	for (int y = -1; y <= 1; ++y)
+	{
+		[unroll]
+		for (int x = -1; x <= 1; ++x)
+		{
+			if (x == 0 && y == 0)
+			{
+				continue;
+			}
+
+			const float2 sampleUV = clamp(UV + float2(x, y) * InvSize, halfPixel, 1.0 - halfPixel);
+			const float4 sampleValue = CurrentTexture.SampleLevel(InputSampler, sampleUV, 0);
+			if (sampleValue.a >= 1.0e7 || abs(sampleValue.a - current.a) > depthTolerance)
+			{
+				continue;
+			}
+
+			const float3 sampleColor = sampleValue.rgb;
+			const float sampleLuminance = Luminance(sampleColor);
+			neighborLuminanceSum += sampleLuminance;
+			neighborLuminanceMax = max(neighborLuminanceMax, sampleLuminance);
+			validNeighborCount += 1.0;
+			neighborhoodMin = min(neighborhoodMin, sampleColor);
+			neighborhoodMax = max(neighborhoodMax, sampleColor);
+		}
+	}
+
+	const float centerLuminance = Luminance(current.rgb);
+	const float neighborLuminanceMean = neighborLuminanceSum / max(validNeighborCount, 1.0);
+	const float fireflyLimit = max(neighborLuminanceMax * 2.0, neighborLuminanceMean + 0.05);
+	if (validNeighborCount > 0.0 && centerLuminance > fireflyLimit)
+	{
+		current.rgb *= fireflyLimit / max(centerLuminance, 1.0e-4);
+	}
+	neighborhoodMin = validNeighborCount > 0.0 ? min(neighborhoodMin, current.rgb) : current.rgb;
+	neighborhoodMax = validNeighborCount > 0.0 ? max(neighborhoodMax, current.rgb) : current.rgb;
 
 	// Unreal uses reversed-Z: zero is the invalid/far-clear depth value.
 	if (HasHistory == 0u || deviceZ <= 0.0)
@@ -48,28 +95,7 @@ void TemporalPS(
 
 	float4 history = HistoryTexture.SampleLevel(InputSampler, previousUV, 0);
 
-	// Clamp reprojected radiance to the current 3x3 neighborhood to suppress ghost trails.
-	float3 neighborhoodMin = current.rgb;
-	float3 neighborhoodMax = current.rgb;
-	const float2 halfPixel = InvSize * 0.5;
-	[unroll]
-	for (int y = -1; y <= 1; ++y)
-	{
-		[unroll]
-		for (int x = -1; x <= 1; ++x)
-		{
-			if (x == 0 && y == 0)
-			{
-				continue;
-			}
-
-			const float2 sampleUV = clamp(UV + float2(x, y) * InvSize, halfPixel, 1.0 - halfPixel);
-			const float3 sampleColor = CurrentTexture.SampleLevel(InputSampler, sampleUV, 0).rgb;
-			neighborhoodMin = min(neighborhoodMin, sampleColor);
-			neighborhoodMax = max(neighborhoodMax, sampleColor);
-		}
-	}
-
+	// Clamp reprojected radiance to the firefly-filtered current neighborhood to suppress ghost trails.
 	history.rgb = clamp(history.rgb, neighborhoodMin, neighborhoodMax);
 	OutColor = float4(lerp(current.rgb, history.rgb, HistoryWeight), current.a);
 }

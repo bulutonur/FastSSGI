@@ -170,14 +170,16 @@ void RayMarchPS(
 				const float3 hitNormal = ReconstructNormalFromDepth(rayViewportUV);
 				const float receiverCosine = saturate(dot(centerNormal, rayDirection));
 				const float emitterCosine = saturate(dot(hitNormal, -rayDirection));
-				const float distanceWeight = 1.0 / (1.0 + rayDistance * rayDistance * 0.00001);
-				float weight = receiverCosine * emitterCosine * distanceWeight;
+				const float weight = receiverCosine * emitterCosine;
+				const float normalizedDistance = saturate(rayDistance / RayMarchRadius);
+				const float smoothFalloff = 1.0 - smoothstep(0.0, 1.0, normalizedDistance);
+				const float radianceFalloff = smoothFalloff*smoothFalloff;
 
-				const float3 radiance = SceneColorTexture.SampleLevel(SceneColorSampler, raySceneUV, 0).rgb;
-				
-				float3 correctedRadiance=ClampLuminance(radiance,1);
-				
-				indirect += max(correctedRadiance, 0.0) * weight;
+				const float3 radiance = max(SceneColorTexture.SampleLevel(SceneColorSampler, raySceneUV, 0).rgb, 0.0);
+
+				// Clamping luminance helps to reduce firefly
+				// Keep falloff out of totalWeight so normalization cannot cancel the attenuation.
+				indirect += ClampLuminance(radiance,1.0) * radianceFalloff * weight;
 				
 				totalWeight += weight;
 				break;
