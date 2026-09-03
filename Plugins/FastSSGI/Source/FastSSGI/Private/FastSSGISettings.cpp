@@ -49,6 +49,7 @@ void UFastSSGISettings::ApplyToConsoleVariables() const
 	SetCVar(TEXT("r.FastSSGI.RayMarchRadius"), RayMarchRadius);
 	SetCVar(TEXT("r.FastSSGI.Intensity"), Intensity);
 	SetCVar(TEXT("r.FastSSGI.HistoryWeight"), HistoryWeight);
+	SetCVar(TEXT("r.FastSSGI.BlurQuality"), static_cast<int32>(BlurQuality));
 	SetCVar(TEXT("r.FastSSGI.BlurRadius"), BlurRadius);
 	SetCVar(TEXT("r.FastSSGI.Debug"), static_cast<int32>(DebugMode));
 }

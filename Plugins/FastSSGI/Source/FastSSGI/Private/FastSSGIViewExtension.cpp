@@ -29,6 +29,9 @@ namespace
 	TAutoConsoleVariable<float> CVarHistoryWeight(
 		TEXT("r.FastSSGI.HistoryWeight"), 0.9f,
 		TEXT("Temporal history weight (0-0.98)."), ECVF_RenderThreadSafe);
+	TAutoConsoleVariable<int32> CVarBlurQuality(
+	TEXT("r.FastSSGI.BlurQuality"), 0,
+	TEXT("Blur quality. 0: low, 1: medium, 2: high."), ECVF_RenderThreadSafe);
 	TAutoConsoleVariable<float> CVarBlurRadius(
 	TEXT("r.FastSSGI.BlurRadius"), 1.5f,
 	TEXT("SSGI blur radius in pixels."), ECVF_RenderThreadSafe);
@@ -158,6 +161,8 @@ void FFastSSGIViewExtension::PrePostProcessPass_RenderThread(
 		Parameters->InputTexture = Input;
 		Parameters->InputSampler = TStaticSamplerState<SF_Point, AM_Clamp, AM_Clamp>::GetRHI();
 		Parameters->BlurRadius=FMath::Clamp(CVarBlurRadius.GetValueOnRenderThread(), 0.5f, 5.0f);
+		Parameters->BlurQuality=FMath::Clamp(CVarBlurQuality.GetValueOnRenderThread(), 0, 2);
+		
 		DrawPass<FFastSSGIBlurPS>(GraphBuilder, View, RDG_EVENT_NAME("%s", Name), Output, InternalRect, InternalExtent, Parameters);
 		return Output;
 	};

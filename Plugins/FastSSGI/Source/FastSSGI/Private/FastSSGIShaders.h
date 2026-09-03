@@ -64,30 +64,13 @@ class FFastSSGIBlurPS final : public FFastSSGIShader
 		SHADER_PARAMETER(FVector2f, Direction)
 		SHADER_PARAMETER(FVector2f, InvSize)
 		SHADER_PARAMETER(float, BlurRadius)
+		SHADER_PARAMETER(int, BlurQuality)
 		SHADER_PARAMETER_RDG_TEXTURE(Texture2D, InputTexture)
 		SHADER_PARAMETER_SAMPLER(SamplerState, InputSampler)
 		RENDER_TARGET_BINDING_SLOTS()
 	END_SHADER_PARAMETER_STRUCT()
 };
-/*
-class FCustomSSGIDenoisePS final : public FFastSSGIShader
-{
-	DECLARE_GLOBAL_SHADER(FCustomSSGIDenoisePS);
-	SHADER_USE_PARAMETER_STRUCT(FCustomSSGIDenoisePS, FFastSSGIShader);
-	BEGIN_SHADER_PARAMETER_STRUCT(FParameters, )
-		SHADER_PARAMETER_STRUCT_REF(FViewUniformShaderParameters, View)
-		SHADER_PARAMETER(FVector4f, SceneUVScaleBias)
-		SHADER_PARAMETER(FVector2f, InvSize)
-		SHADER_PARAMETER(FVector2f, OutputInvSize)
-		SHADER_PARAMETER(float, DenoiseStrength)
-		SHADER_PARAMETER_RDG_TEXTURE(Texture2D, InputTexture)
-		SHADER_PARAMETER_SAMPLER(SamplerState, InputSampler)
-		SHADER_PARAMETER_RDG_TEXTURE(Texture2D, SceneDepthTexture)
-		SHADER_PARAMETER_SAMPLER(SamplerState, SceneDepthSampler)
-		RENDER_TARGET_BINDING_SLOTS()
-	END_SHADER_PARAMETER_STRUCT()
-};
-*/
+
 class FFastSSGICompositePS final : public FFastSSGIShader
 {
 	DECLARE_GLOBAL_SHADER(FFastSSGICompositePS);
